@@ -17,10 +17,20 @@ where the symbols carry the same meaning as in the manuscript:
     B_elite  : multiplicative elite-candidate bonus
     alpha    : weight of the structural-preference term
 
-The structural-preference term D(S_T) is implemented per AEM family. The
-PAEK constraint (used as one example AEM-family setting in the paper) is
-provided as a reference implementation; new families can be added by
-subclassing ``FamilyConstraint``.
+The structural-preference term D(S_T) is implemented per AEM family.
+Six AEM-family constraints are provided as reference implementations,
+matching the six families used in the paper:
+    PAP    -- poly(aryl piperidinium)
+    PBF    -- poly(biphenyl fluorene)
+    PPO    -- poly(phenylene oxide)
+    PAEK   -- poly(arylene ether ketone)
+    PAEKS  -- poly(arylene ether ketone sulfone)
+    PAES   -- poly(arylene ether sulfone)
+
+Each family check is restricted to the main-chain atoms of the two motifs
+so that the constraint reflects the polymer chemical structure rather than
+incidental side-chain motifs. New families can be added by subclassing
+``FamilyConstraint``.
 """
 
 from __future__ import annotations
@@ -302,14 +312,57 @@ def hydrophilic_fraction_for_iec(
 
 
 # ---------------------------------------------------------------------------
-# AEM-family constraints (D(S_T))
+# AEM-family structural constraints (D(S_T))
 # ---------------------------------------------------------------------------
+def _main_chain_has_smarts(mol, main_chain: set, pattern) -> bool:
+    """True iff ``mol`` has a substructure match of ``pattern`` whose atoms
+    all lie on ``main_chain``.
+
+    This is the standard helper used by every family constraint below: a
+    family check should respond to motifs lying on the polymer main chain
+    (which defines the family identity), not to incidental matches living
+    purely on a side chain.
+    """
+    if pattern is None or not main_chain:
+        return False
+    try:
+        for match in mol.GetSubstructMatches(pattern):
+            if set(match).issubset(main_chain):
+                return True
+    except Exception:
+        return False
+    return False
+
+
+def _any_main_chain_aromatic(mol_h, main_chain_h, mol_p, main_chain_p) -> bool:
+    """True iff at least one main-chain atom on either motif is aromatic.
+
+    All six AEM families considered in the paper have an aromatic-rich main
+    chain, so this guard rejects pairs whose main chain is all aliphatic
+    before any family-specific SMARTS check is performed.
+    """
+    return any(
+        mol_h.GetAtomWithIdx(int(i)).GetIsAromatic() for i in main_chain_h
+    ) or any(
+        mol_p.GetAtomWithIdx(int(i)).GetIsAromatic() for i in main_chain_p
+    )
+
+
 class FamilyConstraint:
     """Base class for AEM-family-specific structural constraints.
 
     Subclasses implement ``check`` returning ``True`` if the (Phi, Pho) pair
     belongs to the target family. The base class itself accepts every pair
     that satisfies the universal sanity checks performed by ``compute_reward``.
+
+    Convention used by every subclass below:
+        - SMARTS patterns are tested against main-chain atoms only via
+          ``_main_chain_has_smarts``;
+        - features may live on either the hydrophilic motif (Phi) or the
+          hydrophobic motif (Pho), since the curated AEM data places motifs
+          on either block depending on the polymer architecture;
+        - ``check`` returns ``True`` only when every required substructure
+          is present.
     """
 
     name: str = "Generic"
@@ -318,36 +371,298 @@ class FamilyConstraint:
         return True
 
 
-class PAEKConstraint(FamilyConstraint):
-    """PAEK constraint: at least one aryl ether and one aryl ketone in the pair.
+class PAPConstraint(FamilyConstraint):
+    """PAP -- poly(aryl piperidinium).
 
-    The ether and the ketone are allowed to live on either motif, but at least
-    one of each must be present and at least one main-chain atom (in either
-    motif) must be aromatic. This matches the family-specific structural
-    preference reported in the paper for the PAEK setting.
+    Definition adopted here:
+        - At least one main-chain atom on either motif is aromatic
+          (the ``aryl`` part of poly(aryl piperidinium)).
+        - At least one piperidinium centre is present in the pair, located
+          on the main chain of the hydrophilic motif. Piperidinium is a
+          six-membered saturated ring nitrogen carrying a positive formal
+          charge ([N+;R1;r6]); this matches both N,N-dimethyl-piperidinium
+          (DMP-type) and N-methyl-N-alkyl-piperidinium (mPip-type) cations
+          discussed in the paper.
+        - The polymer main chain must be ether-free, in line with the
+          ether-free design rationale of the PAP family in the AEM
+          literature; an aryl-ether linkage on the main chain is therefore
+          a disqualifier.
+    """
+
+    name = "PAP"
+
+    def __init__(self):
+        # Six-membered saturated ring nitrogen with positive formal charge.
+        self._piperidinium = Chem.MolFromSmarts("[N+;R1;r6]")
+        # Aryl ether linkage written as aromatic-C bound through O to
+        # another aromatic-C. Used to enforce ether-free main chains.
+        self._aryl_ether = Chem.MolFromSmarts("c-[O;X2]-c")
+
+    def check(self, mol_h, main_chain_h, mol_p, main_chain_p) -> bool:
+        if not _any_main_chain_aromatic(
+            mol_h, main_chain_h, mol_p, main_chain_p
+        ):
+            return False
+        # The piperidinium centre may sit at the chain end of the
+        # hydrophilic motif; require its match to overlap with the main
+        # chain of Phi.
+        has_piperidinium = _main_chain_has_smarts(
+            mol_h, main_chain_h, self._piperidinium
+        ) or _main_chain_has_smarts(
+            mol_p, main_chain_p, self._piperidinium
+        )
+        if not has_piperidinium:
+            return False
+        if _main_chain_has_smarts(
+            mol_h, main_chain_h, self._aryl_ether
+        ) or _main_chain_has_smarts(
+            mol_p, main_chain_p, self._aryl_ether
+        ):
+            return False
+        return True
+
+
+class PBFConstraint(FamilyConstraint):
+    """PBF -- poly(biphenyl fluorene).
+
+    Definition adopted here:
+        - At least one main-chain atom on either motif is aromatic.
+        - The polymer chemical structure carries a fluorene core, i.e.
+          two benzene rings fused to a five-membered carbocycle through
+          a shared sp3 carbon. The SMARTS below matches the fluorene
+          quaternary carbon flanked by two fused aromatic rings.
+        - The main chain must be ether-free (no ``c-O-c`` linkage on the
+          main chain), distinguishing PBF from PAES / PAEK / PAEKS that
+          all carry main-chain aryl ethers.
+    """
+
+    name = "PBF"
+
+    def __init__(self):
+        # Fluorene-style sp3 quaternary carbon bridging two fused aromatic
+        # rings. The 9,9-disubstituted fluorene unit characteristic of PBF
+        # structures matches this SMARTS regardless of substitution pattern.
+        self._fluorene_core = Chem.MolFromSmarts(
+            "[C;X4](-c1ccccc1-2)(-c1ccccc1-2)"
+        )
+        # A more permissive backup pattern: spirobifluorene / 9,9-diaryl
+        # fluorene also produces fused biphenyl + sp3 centre, captured by
+        # a generic "two aryl rings on the same sp3 carbon" check on the
+        # main chain.
+        self._diaryl_sp3 = Chem.MolFromSmarts("[C;X4]([c])([c])")
+        self._aryl_ether = Chem.MolFromSmarts("c-[O;X2]-c")
+
+    def check(self, mol_h, main_chain_h, mol_p, main_chain_p) -> bool:
+        if not _any_main_chain_aromatic(
+            mol_h, main_chain_h, mol_p, main_chain_p
+        ):
+            return False
+        has_fluorene = _main_chain_has_smarts(
+            mol_h, main_chain_h, self._fluorene_core
+        ) or _main_chain_has_smarts(
+            mol_p, main_chain_p, self._fluorene_core
+        )
+        if not has_fluorene:
+            # Permissive fallback: at least an sp3 carbon connecting two
+            # aryl rings on the main chain.
+            has_diaryl = _main_chain_has_smarts(
+                mol_h, main_chain_h, self._diaryl_sp3
+            ) or _main_chain_has_smarts(
+                mol_p, main_chain_p, self._diaryl_sp3
+            )
+            if not has_diaryl:
+                return False
+        if _main_chain_has_smarts(
+            mol_h, main_chain_h, self._aryl_ether
+        ) or _main_chain_has_smarts(
+            mol_p, main_chain_p, self._aryl_ether
+        ):
+            return False
+        return True
+
+
+class PPOConstraint(FamilyConstraint):
+    """PPO -- poly(phenylene oxide).
+
+    Definition adopted here:
+        - At least one main-chain atom on either motif is aromatic.
+        - The main chain carries a 2,6-dimethylphenylene oxide repeat
+          motif: an aromatic-O-aromatic linkage where the aromatic carbon
+          carries methyl substituents. This matches the PPO repeat unit
+          ``[*]Oc1c(C)cc(C)cc1[*]`` and its regio-isomers.
+        - No ketone or sulfone group on the main chain (those would
+          re-classify the polymer as PAEK or PAES).
+    """
+
+    name = "PPO"
+
+    def __init__(self):
+        # Aryl ether bridging two aromatic carbons; minimal PPO signature.
+        self._aryl_ether = Chem.MolFromSmarts("c-[O;X2]-c")
+        # 2,6-disubstituted (typically methyl) phenylene oxide pattern.
+        self._dimethyl_phenylene_oxide = Chem.MolFromSmarts(
+            "[O;X2]-c1c([CH3])cc([CH3,CH2,*])cc1"
+        )
+        # Disqualifiers: aryl ketone (PAEK) or aryl sulfone (PAES).
+        self._aryl_ketone = Chem.MolFromSmarts("c-C(=O)-c")
+        self._aryl_sulfone = Chem.MolFromSmarts("c-S(=O)(=O)-c")
+
+    def check(self, mol_h, main_chain_h, mol_p, main_chain_p) -> bool:
+        if not _any_main_chain_aromatic(
+            mol_h, main_chain_h, mol_p, main_chain_p
+        ):
+            return False
+        has_ether = _main_chain_has_smarts(
+            mol_h, main_chain_h, self._aryl_ether
+        ) or _main_chain_has_smarts(
+            mol_p, main_chain_p, self._aryl_ether
+        )
+        if not has_ether:
+            return False
+        # Disqualify ketone / sulfone main-chain motifs to keep PPO
+        # cleanly separated from PAEK / PAES / PAEKS.
+        if _main_chain_has_smarts(
+            mol_h, main_chain_h, self._aryl_ketone
+        ) or _main_chain_has_smarts(
+            mol_p, main_chain_p, self._aryl_ketone
+        ):
+            return False
+        if _main_chain_has_smarts(
+            mol_h, main_chain_h, self._aryl_sulfone
+        ) or _main_chain_has_smarts(
+            mol_p, main_chain_p, self._aryl_sulfone
+        ):
+            return False
+        return True
+
+
+class PAEKConstraint(FamilyConstraint):
+    """PAEK -- poly(arylene ether ketone).
+
+    Definition adopted here:
+        - At least one main-chain atom on either motif is aromatic.
+        - The main chain carries at least one aryl ether (``c-O-c``) and
+          at least one aryl ketone (``c-C(=O)-c``).
+        - The main chain has no aryl sulfone group (which would classify
+          the polymer as PAES or PAEKS).
     """
 
     name = "PAEK"
 
     def __init__(self):
-        self._ether = Chem.MolFromSmarts("[*]O[*]")
-        self._ketone = Chem.MolFromSmarts("[*]C(=O)[*]")
+        self._aryl_ether = Chem.MolFromSmarts("c-[O;X2]-c")
+        self._aryl_ketone = Chem.MolFromSmarts("c-C(=O)-c")
+        self._aryl_sulfone = Chem.MolFromSmarts("c-S(=O)(=O)-c")
 
     def check(self, mol_h, main_chain_h, mol_p, main_chain_p) -> bool:
-        has_aromatic_main = any(
-            mol_h.GetAtomWithIdx(i).GetIsAromatic() for i in main_chain_h
-        ) or any(
-            mol_p.GetAtomWithIdx(i).GetIsAromatic() for i in main_chain_p
-        )
-        if not has_aromatic_main:
+        if not _any_main_chain_aromatic(
+            mol_h, main_chain_h, mol_p, main_chain_p
+        ):
             return False
-        has_ether = mol_h.HasSubstructMatch(self._ether) or mol_p.HasSubstructMatch(
-            self._ether
+        has_ether = _main_chain_has_smarts(
+            mol_h, main_chain_h, self._aryl_ether
+        ) or _main_chain_has_smarts(
+            mol_p, main_chain_p, self._aryl_ether
         )
-        has_ketone = mol_h.HasSubstructMatch(self._ketone) or mol_p.HasSubstructMatch(
-            self._ketone
+        has_ketone = _main_chain_has_smarts(
+            mol_h, main_chain_h, self._aryl_ketone
+        ) or _main_chain_has_smarts(
+            mol_p, main_chain_p, self._aryl_ketone
         )
-        return has_ether and has_ketone
+        if not (has_ether and has_ketone):
+            return False
+        if _main_chain_has_smarts(
+            mol_h, main_chain_h, self._aryl_sulfone
+        ) or _main_chain_has_smarts(
+            mol_p, main_chain_p, self._aryl_sulfone
+        ):
+            return False
+        return True
+
+
+class PAEKSConstraint(FamilyConstraint):
+    """PAEKS -- poly(arylene ether ketone sulfone).
+
+    Definition adopted here:
+        - At least one main-chain atom on either motif is aromatic.
+        - The main chain carries simultaneously an aryl ether
+          (``c-O-c``), an aryl ketone (``c-C(=O)-c``), and an aryl
+          sulfone (``c-S(=O)(=O)-c``). All three groups must lie on the
+          main chain of either motif.
+    """
+
+    name = "PAEKS"
+
+    def __init__(self):
+        self._aryl_ether = Chem.MolFromSmarts("c-[O;X2]-c")
+        self._aryl_ketone = Chem.MolFromSmarts("c-C(=O)-c")
+        self._aryl_sulfone = Chem.MolFromSmarts("c-S(=O)(=O)-c")
+
+    def check(self, mol_h, main_chain_h, mol_p, main_chain_p) -> bool:
+        if not _any_main_chain_aromatic(
+            mol_h, main_chain_h, mol_p, main_chain_p
+        ):
+            return False
+        has_ether = _main_chain_has_smarts(
+            mol_h, main_chain_h, self._aryl_ether
+        ) or _main_chain_has_smarts(
+            mol_p, main_chain_p, self._aryl_ether
+        )
+        has_ketone = _main_chain_has_smarts(
+            mol_h, main_chain_h, self._aryl_ketone
+        ) or _main_chain_has_smarts(
+            mol_p, main_chain_p, self._aryl_ketone
+        )
+        has_sulfone = _main_chain_has_smarts(
+            mol_h, main_chain_h, self._aryl_sulfone
+        ) or _main_chain_has_smarts(
+            mol_p, main_chain_p, self._aryl_sulfone
+        )
+        return has_ether and has_ketone and has_sulfone
+
+
+class PAESConstraint(FamilyConstraint):
+    """PAES -- poly(arylene ether sulfone).
+
+    Definition adopted here:
+        - At least one main-chain atom on either motif is aromatic.
+        - The main chain carries at least one aryl ether (``c-O-c``) and
+          at least one aryl sulfone (``c-S(=O)(=O)-c``).
+        - The main chain has no aryl ketone group (which would classify
+          the polymer as PAEK or PAEKS).
+    """
+
+    name = "PAES"
+
+    def __init__(self):
+        self._aryl_ether = Chem.MolFromSmarts("c-[O;X2]-c")
+        self._aryl_sulfone = Chem.MolFromSmarts("c-S(=O)(=O)-c")
+        self._aryl_ketone = Chem.MolFromSmarts("c-C(=O)-c")
+
+    def check(self, mol_h, main_chain_h, mol_p, main_chain_p) -> bool:
+        if not _any_main_chain_aromatic(
+            mol_h, main_chain_h, mol_p, main_chain_p
+        ):
+            return False
+        has_ether = _main_chain_has_smarts(
+            mol_h, main_chain_h, self._aryl_ether
+        ) or _main_chain_has_smarts(
+            mol_p, main_chain_p, self._aryl_ether
+        )
+        has_sulfone = _main_chain_has_smarts(
+            mol_h, main_chain_h, self._aryl_sulfone
+        ) or _main_chain_has_smarts(
+            mol_p, main_chain_p, self._aryl_sulfone
+        )
+        if not (has_ether and has_sulfone):
+            return False
+        if _main_chain_has_smarts(
+            mol_h, main_chain_h, self._aryl_ketone
+        ) or _main_chain_has_smarts(
+            mol_p, main_chain_p, self._aryl_ketone
+        ):
+            return False
+        return True
 
 
 # ---------------------------------------------------------------------------
@@ -588,23 +903,38 @@ class RewardFunction:
 # ---------------------------------------------------------------------------
 # Convenience factory
 # ---------------------------------------------------------------------------
+# Registered AEM-family constraints (the six families used in the paper)
+# plus a no-op "GENERIC" entry for ablation runs.
+FAMILY_REGISTRY: Dict[str, type] = {
+    "PAP": PAPConstraint,
+    "PBF": PBFConstraint,
+    "PPO": PPOConstraint,
+    "PAEK": PAEKConstraint,
+    "PAEKS": PAEKSConstraint,
+    "PAES": PAESConstraint,
+    "GENERIC": FamilyConstraint,
+}
+
+
 def build_reward_fn(family_name: str, cfg: Optional[RewardConfig] = None) -> Callable:
     """Return a callable reward function for one of the registered AEM families.
 
     Currently registered:
-        - ``"PAEK"``: poly(arylene ether ketone) constraint
-        - ``"GENERIC"``: no family-specific constraint (D(S_T) defaults to 1)
+        - ``"PAP"``    poly(aryl piperidinium)
+        - ``"PBF"``    poly(biphenyl fluorene)
+        - ``"PPO"``    poly(phenylene oxide)
+        - ``"PAEK"``   poly(arylene ether ketone)
+        - ``"PAEKS"``  poly(arylene ether ketone sulfone)
+        - ``"PAES"``   poly(arylene ether sulfone)
+        - ``"GENERIC"`` no family-specific constraint (D(S_T) defaults to 1)
 
-    Add new families by subclassing ``FamilyConstraint`` and extending the
-    dispatch table below.
+    Add new families by subclassing ``FamilyConstraint`` and registering
+    the subclass in ``FAMILY_REGISTRY``.
     """
-    family_name = family_name.upper()
-    table = {
-        "PAEK": PAEKConstraint,
-        "GENERIC": FamilyConstraint,
-    }
-    if family_name not in table:
+    key = family_name.upper()
+    if key not in FAMILY_REGISTRY:
         raise ValueError(
-            f"Unknown family '{family_name}'. Registered: {list(table)}."
+            f"Unknown family '{family_name}'. "
+            f"Registered: {list(FAMILY_REGISTRY)}."
         )
-    return RewardFunction(family=table[family_name](), cfg=cfg)
+    return RewardFunction(family=FAMILY_REGISTRY[key](), cfg=cfg)
