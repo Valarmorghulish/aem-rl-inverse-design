@@ -1,0 +1,16 @@
+{
+  "pi1m_csv": "data/PI1M.csv",
+  "pi1m_delimiter": "\t",
+  "aem_csv": "data/Conductivity_data_merged_processed.csv",
+  "smiles_hydrophilic_col": "Hydrophilic",
+  "smiles_hydrophobic_col": "Hydrophobic",
+  "output_dir": "checkpoints/generator",
+  "n_iterations": 2000000,
+  "hidden_size": 1500,
+  "stack_width": 1500,
+  "stack_depth": 200,
+  "lr": 0.01,
+  "max_len": 256,
+  "augment": true,
+  "checkpoint_name": "checkpoint_pretrain.pth"
+}

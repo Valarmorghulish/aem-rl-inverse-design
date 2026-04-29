@@ -1,0 +1,17 @@
+{
+  "aem_csv": "data/Conductivity_data_merged_processed.csv",
+  "smiles_hydrophilic_col": "Hydrophilic",
+  "smiles_hydrophobic_col": "Hydrophobic",
+  "pretrained": "checkpoints/generator/checkpoint_pretrain.pth",
+  "tokens": "checkpoints/generator/tokens.json",
+  "output_dir": "checkpoints/generator",
+  "n_iterations": 500000,
+  "hidden_size": 1500,
+  "stack_width": 1500,
+  "stack_depth": 200,
+  "lr": 5e-05,
+  "max_len": 256,
+  "augment": false,
+  "checkpoint_name": "checkpoint_finetune.pth",
+  "finetune_data_name": "aem_finetune_unique_with_roles.csv"
+}
