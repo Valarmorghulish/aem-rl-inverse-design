@@ -8,7 +8,7 @@ Implements:
 
 The fragment-contribution lookup file ``fpscores.pkl.gz`` is required at
 runtime; obtain it from the original RDKit Contrib release and place it
-alongside this module (or in the working directory).
+alongside this module (or https://github.com/rdkit/rdkit/blob/master/Contrib/SA_Score/sascorer.py).
 """
 
 from __future__ import annotations
