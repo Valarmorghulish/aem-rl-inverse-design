@@ -1,14 +1,32 @@
-torch>=2.0.0
-transformers>=4.30.0
-rdkit>=2023.3.1
-numpy>=1.23
-pandas>=1.5
-scikit-learn>=1.2
-joblib>=1.2
-tqdm>=4.65
-matplotlib>=3.6
-mordred>=1.2.0
-catboost>=1.2
-optuna>=3.2
-shap>=0.42
-seaborn>=0.12
+# Author's exact environment for full reproducibility.
+# Use this only if requirements.txt fails.
+# Generated on Windows 10, Python 3.10, CUDA 12.1
+torch==2.0.1
+transformers==4.30.2
+tokenizers==0.13.3
+rdkit==2023.9.5
+catboost==1.2.10
+numpy==1.26.4
+pandas==2.2.x        
+scikit-learn==1.7.2
+scipy==1.15.2
+joblib==1.4.0
+tqdm==4.66.2
+matplotlib==3.10.8
+mordred==1.2.0
+optuna>=3.2   
+shap>=0.42            
+seaborn==0.13.2
+pyyaml==6.0.2
+huggingface-hub==0.36.2
+safetensors==0.5.3
+accelerate==1.8.1
+pillow==10.3.0
+networkx==2.8.8
+sympy==1.14.0
+filelock==3.13.4
+fsspec==2024.3.1
+regex==2024.11.6
+requests==2.31.0
+six==1.16.0
+typing_extensions==4.12.2
