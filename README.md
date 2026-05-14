@@ -2,7 +2,7 @@
 
 This repository contains the code accompanying the paper
 **"Multi-objective Reinforcement-Learning-Enabled Inverse Design of Anion
-Exchange Membranes"** (Journal of Membrane Science).
+Exchange Membranes"**.
 
 The workflow couples a stack-augmented motif generator, a polyBERT-based
 multitask property predictor for hydroxide conductivity and SR, and a
