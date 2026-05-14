@@ -259,19 +259,6 @@ name through ``--family``.
 - All seeds are fixed to 42 by default (CLI ``--random-state``).
 
 ## Citation
-
-Please cite the accompanying paper if you use this code:
-
-```
-@article{zhao2026aemrl,
-  title={Multi-objective Reinforcement-Learning-Enabled Inverse Design
-         of Anion Exchange Membranes},
-  author={Zhao, Shengzhan and Feng, Wenzhuo and Liu, Lunyang and Li, Hongfei},
-  journal={Journal of Membrane Science},
-  year={2026}
-}
-```
-
 The generator and the policy-gradient training driver follow ReLeaSE:
 
 ```
