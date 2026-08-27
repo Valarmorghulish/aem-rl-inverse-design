@@ -2,7 +2,7 @@
 
 This repository contains the code accompanying the paper
 **"Multi-objective Reinforcement-Learning-Enabled Inverse Design of Anion
-Exchange Membranes"**.
+Exchange Membranes"** (Journal of Membrane Science).
 
 The workflow couples a stack-augmented motif generator, a polyBERT-based
 multitask property predictor for hydroxide conductivity and SR, and a
@@ -35,6 +35,9 @@ aem-rl-inverse-design/
 ├── configs/                      # JSON configuration templates
 ├── data/
 │   └── README.md                 # data availability statement
+├── plotting/                     # manuscript figure-generation scripts
+│   ├── README.md
+│   └── figures/
 ├── scripts/                      # training entry points
 │   ├── train_generator_pretrain.py
 │   ├── train_generator_finetune.py
@@ -61,8 +64,8 @@ generator and predictor training. CatBoost training runs on CPU.
 
 ```bash
 # Clone the repository
-git clone https://github.com/Valarmorghulish/aem-rl-inverse-design.git
-cd aem-rl-inverse-design
+git clone <repository-url>
+cd <repository-directory>
 
 # Create an isolated environment (recommended)
 python -m venv .venv
@@ -250,6 +253,12 @@ name through ``--family``.
 
 ## Reproducibility notes
 
+The scripts used to generate the manuscript figures are provided in
+``plotting/figures``. They use repository-relative paths by default and accept
+``AEM_RL_ROOT`` and ``AEM_RL_FIGURE_OUTPUT`` for external data and output
+locations. See ``plotting/README.md`` for input requirements and figure
+provenance.
+
 - The fixed condition vector used during RL prediction is
   ``Temperature = 80 degC``, ``RH = 100%``, ``IEC = 2.0 mmol/g``,
   ``HydrophilicFrac`` solved from Eq. 4, and ``PolymerArchitecture``
@@ -259,6 +268,19 @@ name through ``--family``.
 - All seeds are fixed to 42 by default (CLI ``--random-state``).
 
 ## Citation
+
+Please cite the accompanying paper if you use this code:
+
+```
+@article{zhao2026aemrl,
+  title={Multi-objective Reinforcement-Learning-Enabled Inverse Design
+         of Anion Exchange Membranes},
+  author={Zhao, Shengzhan and Feng, Wenzhuo and Liu, Lunyang and Li, Hongfei},
+  journal={Journal of Membrane Science},
+  year={2026}
+}
+```
+
 The generator and the policy-gradient training driver follow ReLeaSE:
 
 ```
