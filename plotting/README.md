@@ -76,10 +76,6 @@ Transformers, RDKit, joblib, safetensors, and tqdm.
 
 ## Provenance and reproducibility
 
-See `FIGURE_MAP.csv` for figure-to-script mappings and `PROVENANCE.md` for the
-source notebook records. Source notebooks are not distributed in this
-repository.
+See the Contents section above for script-to-analysis mappings and `PROVENANCE.md` for source notebook records. Source notebooks are not distributed in this repository.
 
-Run scripts from the repository root or set `AEM_RL_ROOT` explicitly. Do not
-commit generated images or model files unless they are required as release
-assets. Record the input-data version and software environment for every export.
+Run scripts from the repository root or set `AEM_RL_ROOT` explicitly. Do not commit generated images or model files unless they are required as release assets. Record the input-data version and software environment for every export.
